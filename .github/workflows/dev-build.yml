@@ -1,0 +1,80 @@
+name: Dev build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        required: true
+        default: master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-build-${{ inputs.ref }}
+  cancel-in-progress: true
+
+env:
+  GHC_MUSL_IMAGE: quay.io/benz0li/ghc-musl:9.6.7
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Cache stack root
+        uses: actions/cache@v6
+        with:
+          path: ~/.stack-musl
+          key: stack-musl-${{ hashFiles('stack.yaml', 'stack.yaml.lock', 'package.yaml') }}
+          restore-keys: stack-musl-
+
+      - name: Build static binary
+        run: |
+          mkdir -p "$HOME/.stack-musl" dist
+          docker run --rm \
+            -v "$PWD:/src" -v "$HOME/.stack-musl:/root/.stack" -w /src \
+            "$GHC_MUSL_IMAGE" \
+            stack build --system-ghc --no-install-ghc --allow-different-user \
+              --ghc-options='-optl-static -optl-pthread' \
+              --copy-bins --local-bin-path dist tvmv:exe:tvmv
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.stack-musl" dist .stack-work
+
+      - name: Check the binary
+        run: |
+          file dist/tvmv
+          file dist/tvmv | grep -Eq 'statically linked|static-pie linked'
+          dist/tvmv --help
+
+      - name: Publish to the dev pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: ${{ inputs.ref }}
+        run: |
+          sha="$(git rev-parse --short HEAD)"
+          asset="tvmv-$(printf '%s' "$REF" | tr -c 'A-Za-z0-9._-' '-')-$sha-linux-x86_64"
+          cp dist/tvmv "$asset"
+
+          if ! gh release view dev > /dev/null 2>&1; then
+            gh release create dev --prerelease --title "Development builds" \
+              --notes "Rolling builds of unreleased branches, produced by the Dev build workflow. Each run overwrites the asset of its branch. Not a release."
+          fi
+          gh release upload dev "$asset" --clobber
+
+          {
+            echo "### $asset"
+            echo
+            echo "- Ref: \`$REF\`"
+            echo "- Commit: \`$(git rev-parse HEAD)\`"
+            echo "- SHA-256: \`$(sha256sum "$asset" | cut -d' ' -f1)\`"
+            echo
+            echo '```'
+            echo "wget $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/dev/$asset"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
