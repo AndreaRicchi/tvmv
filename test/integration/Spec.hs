@@ -12,8 +12,8 @@ import Test.Hspec
 main :: IO ()
 main = hspec spec
 
--- Two simple integration tests. Note: they need to be run in order. (The
--- `undo` test undoes the work done by the `mv` test.)
+-- A few simple integration tests. Note: they need to be run in order. (Each
+-- `undo` test undoes the work done by the `mv` test before it.)
 --
 -- We first create some test files in a temp directory, then call `mv` on them,
 -- asserting on the resulting renamed files. Then we call `undo` to reset the
@@ -31,9 +31,11 @@ spec :: Spec
 spec = do
   describe "mv" mvSpec
   describe "undo" undoSpec
+  describe "mv (movie)" mvMovieSpec
+  describe "undo (movie)" undoMovieSpec
 
 mvSpec :: Spec
-mvSpec = before_ testSetup $ do
+mvSpec = before_ (testSetup initialFiles) $ do
   -- note running `testSetup` BEFORE this test
   describe "mv command" $ do
     it "renames a directory of files according to (mock) API data" $ do
@@ -47,6 +49,21 @@ undoSpec = after_ cleanup $ do
     it "reverts the most recently-run mv operation" $ do
       runTestCommand undoCommand `shouldReturn` Right ()
       dirContentsShouldBe initialFiles -- should be back where we started
+
+-- Same pair of tests again, but for a movie and its subtitles.
+mvMovieSpec :: Spec
+mvMovieSpec = before_ (testSetup initialMovieFiles) $ do
+  describe "mv command, in movie mode" $ do
+    it "renames a movie's files according to (mock) API data" $ do
+      runTestCommand mvMovieCommand `shouldReturn` Right ()
+      dirContentsShouldBe expectedMovieResults
+
+undoMovieSpec :: Spec
+undoMovieSpec = after_ cleanup $ do
+  describe "undo command" $ do
+    it "reverts the most recently-run movie mv operation" $ do
+      runTestCommand undoCommand `shouldReturn` Right ()
+      dirContentsShouldBe initialMovieFiles
 
 -- Helper to run a command with our fake API.
 runTestCommand :: Command -> IO (Either Error ())
@@ -76,9 +93,14 @@ mvOptions =
       noLog = False, -- we want a log!
       allowPartial = False, -- don't allow partial matches
       unicodeFilenames = False, -- doesn't really matter for these tests
+      movie = False,
       userSearchTerms = Just (UserSearchTerms (Id 790) (Just 12)),
       seasonFiles = [testTempDir]
     }
+
+-- Movies are selected the same way, but have no season.
+mvMovieCommand :: Command
+mvMovieCommand = Mv mvOptions {movie = True, userSearchTerms = Just (UserSearchTerms (Id 348) Nothing)}
 
 undoCommand :: Command
 undoCommand = Undo undoOptions
@@ -88,18 +110,18 @@ undoOptions = UndoOptions {force = True, logFile = Nothing}
 
 -- Run before our `mv` integration test. Creates the files we'll be working
 -- with in a temporary directory.
-testSetup :: IO ()
-testSetup = do
+testSetup :: [FilePath] -> IO ()
+testSetup filesToCreate = do
   putStrLn "Removing any pre-existing test files..."
   removePathForcibly testTempDir
   putStrLn $ "Creating files for test run in directory " <> testTempDir <> "..."
-  touchFiles
+  touchFiles filesToCreate
 
 -- Create our initial files. The fact that they're empty doesn't matter for us.
-touchFiles :: IO ()
-touchFiles = do
+touchFiles :: [FilePath] -> IO ()
+touchFiles filesToCreate = do
   createDirectoryIfMissing False testTempDir
-  let files = map (testTempDir </>) initialFiles
+  let files = map (testTempDir </>) filesToCreate
   mapM_ touch files
   where
     touch f = TIO.writeFile f ""
@@ -124,6 +146,12 @@ testTempDir = "it-test-tmp"
 
 initialFiles :: [FilePath]
 initialFiles = ["ep1.mp4", "Ep2.mp4", "EP3.mp4", "ep4.mp4"]
+
+initialMovieFiles :: [FilePath]
+initialMovieFiles = ["movie.en.srt", "movie.mkv"]
+
+expectedMovieResults :: [FilePath]
+expectedMovieResults = ["Alien (1979).en.srt", "Alien (1979).mkv"]
 
 expectedResults :: [FilePath]
 expectedResults =

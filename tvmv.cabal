@@ -31,6 +31,7 @@ library
       Command
       Domain.API
       Domain.Error
+      Domain.Movie
       Domain.Rename
       Domain.Show
       Exec.Commands
@@ -159,5 +160,6 @@ test-suite unit
     , hspec
     , text
     , themoviedb
+    , time
     , tvmv
   default-language: GHC2021

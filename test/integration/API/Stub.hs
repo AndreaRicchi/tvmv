@@ -2,17 +2,37 @@ module API.Stub (testAPI) where
 
 import Data.Text qualified as T
 import Domain.API (APIConfig, APIWrapper (..))
+import Domain.Movie (Movie (..))
 import Domain.Show (Episode (..), ItemId, Season (..), TvShow (..))
 import Monad.Tvmv (Tvmv)
 
--- Just a simple stub! Hard-coded to return season 12 of Poirot for now, but
--- should be easy to flesh it out if we need more complex tests.
+-- Just a simple stub! Hard-coded to return season 12 of Poirot (or, for
+-- movies, Alien) for now, but should be easy to flesh it out if we need more
+-- complex tests.
 testAPI :: APIWrapper Tvmv
 testAPI =
   APIWrapper
     { getShow = getShowStub,
       getSeason = getSeasonStub,
-      queryShows = queryShowsStub
+      queryShows = queryShowsStub,
+      getMovie = getMovieStub,
+      queryMovies = queryMoviesStub
+    }
+
+getMovieStub :: Monad m => APIConfig -> ItemId -> m Movie
+getMovieStub _ _ = return alienMovieData
+
+queryMoviesStub :: Monad m => APIConfig -> T.Text -> m [Movie]
+queryMoviesStub _ _ = return [alienMovieData]
+
+alienMovieData :: Movie
+alienMovieData =
+  Movie
+    { movieId = 348,
+      movieTitle = "Alien",
+      movieYear = Just 1979,
+      movieDescription = "!!!",
+      movieUrl = Nothing
     }
 
 getShowStub :: Monad m => APIConfig -> ItemId -> m TvShow

@@ -7,6 +7,7 @@ module Domain.API
 where
 
 import Data.Text (Text)
+import Domain.Movie (Movie)
 import Domain.Show (ItemId, Season, TvShow)
 
 type APIKey = Text
@@ -26,5 +27,7 @@ data APIConfig = APIConfig
 data APIWrapper m = APIWrapper
   { getShow :: APIConfig -> ItemId -> m TvShow,
     getSeason :: APIConfig -> TvShow -> Int -> m Season,
-    queryShows :: APIConfig -> Text -> m [TvShow]
+    queryShows :: APIConfig -> Text -> m [TvShow],
+    getMovie :: APIConfig -> ItemId -> m Movie,
+    queryMovies :: APIConfig -> Text -> m [Movie]
   }

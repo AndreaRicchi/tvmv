@@ -10,15 +10,19 @@ import Exec.Env (Env)
 import Print.Color (Colorized (..))
 import Text.Printf (printf)
 
--- Query the configured API for a show with the given name. The `search` command!
+-- Query the configured API for a show (or a movie) with the given name. The
+-- `search` command!
 search :: (MonadIO m, MonadError Error m) => Env -> APIWrapper m -> SearchOptions -> m ()
-search env withApi (SearchOptions maybeApiKey maybeLanguage searchQuery) = do
+search env withApi (SearchOptions maybeApiKey maybeLanguage movieMode searchQuery) = do
   apiConfig <- API.resolveAPIConfig maybeApiKey maybeLanguage env
   putStrLn' "Querying API..."
-  tvShowResults <- API.searchShowByName withApi apiConfig searchQuery
-  putStrLn' $ resultsMsg tvShowResults
-  printColorizedListLn tvShowResults
+  if movieMode
+    then API.searchMoviesByName withApi apiConfig searchQuery >>= printResults
+    else API.searchShowByName withApi apiConfig searchQuery >>= printResults
   where
+    printResults results = do
+      putStrLn' $ resultsMsg results
+      printColorizedListLn results
     resultsMsg r = printf "Found %d results\n" (length r)
 
 -- Wrapper for less lifting :')

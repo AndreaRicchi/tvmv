@@ -31,6 +31,7 @@ data MvOptions = MvOptions
     noLog :: Bool, -- don't write a log file
     allowPartial :: Bool, -- allow partial matches of episodes/files
     unicodeFilenames :: Bool, -- allow full unicode in resulting filenames
+    movie :: Bool, -- the files are a movie, not a TV season
 
     -- If the user specifies NO search terms, we'll attempt to autodetect everything.
     -- If the user specifies ONLY show name/ID, we'll attempt to autodetect the season.
@@ -51,6 +52,11 @@ data MvOptions = MvOptions
 --  `tvmv mv -i 1234 -s 4`    // using ID, don't autodetect anything
 --  **BAD**, show not specified, can't autodetect: `tvmv mv -s 4`
 --  (Note that the "bad" case is impossible to represent with this data model!)
+--
+-- In movie mode (`-m`) the showSelection picks the movie instead, and it's
+-- required -- there's no autodetection. A season makes no sense there:
+--  `tvmv mv -m -n alien`     // first match for "alien"
+--  `tvmv mv -m -i 348`       // using ID
 data UserSearchTerms = UserSearchTerms
   { showSelection :: SearchKey,
     seasonSelection :: Maybe Int
@@ -62,6 +68,7 @@ data SearchKey = Name Text | Id ItemId
 data SearchOptions = SearchOptions
   { apiKey :: Maybe APIKey,
     language :: Maybe LanguageCode,
+    movie :: Bool, -- search for movies rather than TV shows
     query :: Text
   }
 

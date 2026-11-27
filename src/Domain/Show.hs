@@ -4,6 +4,7 @@ module Domain.Show
     TvShow (..),
     ItemId,
     showInfoBrief,
+    wrapAndTrim,
   )
 where
 
@@ -73,7 +74,7 @@ instance Pretty TvShow where
 showInfoBrief :: TvShow -> T.Text
 showInfoBrief = uncolor . colorize
 
--- Format the show blurb for text console output. Wrap the text at 78 chars and
+-- Format a blurb (show or movie) for text console output. Wrap the text at 78 chars and
 -- only grab the first 3 lines for longer results.
 wrapAndTrim :: T.Text -> T.Text
 wrapAndTrim t = trimmedLines <> suffix

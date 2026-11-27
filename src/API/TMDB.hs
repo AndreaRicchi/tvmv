@@ -1,5 +1,6 @@
 module API.TMDB
-  ( mapTvShow,
+  ( mapMovie,
+    mapTvShow,
     tmdbApiWrapper,
     tmdbDefaultAPIKey,
     tmdbSettings,
@@ -8,8 +9,10 @@ where
 
 import API.Error (toAPIError)
 import Data.Text qualified as T
+import Data.Time.Calendar (toGregorian)
 import Domain.API (APIConfig (..), APIKey, APIWrapper (..))
 import Domain.Error (Error (..))
+import Domain.Movie (Movie (..))
 import Domain.Show (Episode (..), ItemId, Season (..), TvShow (..))
 import Monad.Tvmv (Tvmv, mkTvmv)
 import Network.API.TheMovieDB qualified as TMDB
@@ -29,7 +32,9 @@ tmdbApiWrapper =
   APIWrapper
     { getShow = getShow',
       getSeason = getSeason',
-      queryShows = queryShows'
+      queryShows = queryShows',
+      getMovie = getMovie',
+      queryMovies = queryMovies'
     }
 
 -- Get data for a single show. Note that this only fetches certain top-level
@@ -53,6 +58,18 @@ queryShows' :: APIConfig -> T.Text -> Tvmv [TvShow]
 queryShows' apiConfig nameQuery = toTvmv apiConfig opDescription $ queryShowsTMDB nameQuery
   where
     opDescription = "search shows with query text \"" <> nameQuery <> "\""
+
+-- Get data for a single movie.
+getMovie' :: APIConfig -> ItemId -> Tvmv Movie
+getMovie' apiConfig itemId = toTvmv apiConfig opDescription $ mapMovie <$> TMDB.fetchMovie itemId
+  where
+    opDescription = "fetch movie data for ID: " <> toText itemId
+
+-- Get list of movies from TMDB that match the given query.
+queryMovies' :: APIConfig -> T.Text -> Tvmv [Movie]
+queryMovies' apiConfig nameQuery = toTvmv apiConfig opDescription $ map mapMovie <$> TMDB.searchMovies nameQuery
+  where
+    opDescription = "search movies with query text \"" <> nameQuery <> "\""
 
 getShowTMDB :: ItemId -> TMDB.TheMovieDB TvShow
 getShowTMDB itemId = do
@@ -113,6 +130,19 @@ mapTvShow s =
   where
     mapSeason = mapTvSeason (TMDB.tvName s) -- map with the given name
     buildUrl showId = "https://www.themoviedb.org/tv/" <> toText showId
+
+-- Same idea for movies. All we need from the release date is the year.
+mapMovie :: TMDB.Movie -> Movie
+mapMovie m =
+  Movie
+    { movieId = TMDB.movieID m,
+      movieTitle = TMDB.movieTitle m,
+      movieYear = getYear <$> TMDB.movieReleaseDate m,
+      movieDescription = TMDB.movieOverview m,
+      movieUrl = Just $ "https://www.themoviedb.org/movie/" <> toText (TMDB.movieID m)
+    }
+  where
+    getYear day = let (year, _month, _day) = toGregorian day in year
 
 toText :: (Show a) => a -> T.Text
 toText = T.pack . show

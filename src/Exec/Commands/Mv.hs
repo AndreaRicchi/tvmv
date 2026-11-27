@@ -2,6 +2,7 @@ module Exec.Commands.Mv (mv) where
 
 import API qualified
 import Command (MvOptions (..), SearchKey (..), UserSearchTerms (..))
+import Control.Monad (when)
 import Control.Monad.Except (MonadError, liftEither, throwError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Writer (MonadWriter)
@@ -9,7 +10,8 @@ import Data.List (intercalate, intersperse)
 import Data.Text qualified as T
 import Domain.API (APIWrapper)
 import Domain.Error (Error (..))
-import Domain.Rename (MatchedEpisodes, episodes, matchEpisodes, matchEpisodesAllowPartial, renameFiles)
+import Domain.Movie (Movie (..))
+import Domain.Rename (MatchedEpisodes, episodes, matchEpisodes, matchEpisodesAllowPartial, renameFiles, renameMovieFiles)
 import Domain.Show (Episode (..), Season (..))
 import Exec.Env (Env)
 import Exec.Filter (filterFiles)
@@ -20,15 +22,66 @@ import Match (MatchResults (..), ParseResults (..), ParsedFile, matchParsedEpiso
 import Print.Color (ColorText, asWarning, cyan, printColorLn)
 import System.Directory (makeRelativeToCurrentDirectory)
 
--- Rename the files of a TV season. This puts the `mv` in tvmv!
+-- Rename the files of a TV season, or of a movie. This puts the `mv` in tvmv!
 mv ::
   (MonadIO m, MonadError Error m, MonadWriter [RenameResult] m) =>
   Env ->
   APIWrapper m ->
   MvOptions ->
   m ()
-mv env withApi mvOptions = do
-  let (MvOptions maybeApiKey maybeLanguage force _noLog _partial unicodeFilenames userSearchTerms inFiles) = mvOptions
+mv env withApi mvOptions = if movieMode then mvMovie env withApi mvOptions else mvSeason env withApi mvOptions
+  where
+    (MvOptions _ _ _ _ _ _ movieMode _ _) = mvOptions
+
+-- Rename the files of a movie. Much simpler than the TV case: there's nothing
+-- to parse and nothing to match, since every input file belongs to the one
+-- movie the user has picked.
+mvMovie ::
+  (MonadIO m, MonadError Error m, MonadWriter [RenameResult] m) =>
+  Env ->
+  APIWrapper m ->
+  MvOptions ->
+  m ()
+mvMovie env withApi mvOptions = do
+  let (MvOptions maybeApiKey maybeLanguage force _noLog _partial unicodeFilenames _movie userSearchTerms inFiles) = mvOptions
+
+  -- No autodetection for movies (yet?), so the user has to tell us which one:
+  movieSelection <- liftEither $ getMovieSelection userSearchTerms
+
+  apiConfig <- API.resolveAPIConfig maybeApiKey maybeLanguage env
+
+  filteredFiles <- liftIO $ listFiles inFiles >>= filterFiles
+  when (null filteredFiles) $ throwError $ RenameError "No files to rename"
+
+  putStrLn' "Fetching movie data from API"
+  movieData <- case movieSelection of
+    Name n -> API.searchMovieByName withApi apiConfig n
+    Id i -> API.searchMovieById withApi apiConfig i
+
+  -- As with episodes, the movie's title is "portable" by default:
+  let niceMovieData = if unicodeFilenames then movieData else makePortableMovieTitle movieData
+
+  renameOps <- liftEither $ renameMovieFiles niceMovieData filteredFiles
+  runRenameOps renameOps (renameMsg renameOps) force
+  where
+    renameMsg ops =
+      "Preparing to execute the following " <> colorNum (length ops) <> " rename operations...\n"
+
+-- In movie mode the user must select a movie, and a season is meaningless.
+getMovieSelection :: Maybe UserSearchTerms -> Either Error SearchKey
+getMovieSelection Nothing = Left $ InvalidOptions "to rename a movie, tell tvmv which one with the '-n' or '-i' option. (You can get a movie's ID with `tvmv search -m`.)"
+getMovieSelection (Just (UserSearchTerms _ (Just _))) = Left $ InvalidOptions "movies don't have seasons! The '-s' option can't be used with '-m'."
+getMovieSelection (Just (UserSearchTerms selection Nothing)) = Right selection
+
+-- Rename the files of a TV season.
+mvSeason ::
+  (MonadIO m, MonadError Error m, MonadWriter [RenameResult] m) =>
+  Env ->
+  APIWrapper m ->
+  MvOptions ->
+  m ()
+mvSeason env withApi mvOptions = do
+  let (MvOptions maybeApiKey maybeLanguage force _noLog _partial unicodeFilenames _movie userSearchTerms inFiles) = mvOptions
 
   -- Before doing anything, ensure we have an API key (and a valid language, if
   -- one is set) available:
@@ -181,6 +234,14 @@ makePortableEpNames = map makePortableNames
           episodeShowName = makeTextPortable (episodeShowName e)
         }
     makeTextPortable = T.pack . makePortable . T.unpack
+
+-- Same deal for a movie's title. One extra nicety first: a colon is by far
+-- the most common "unportable" character in movie titles, and replacing it
+-- alone gives us stuff like "Alien- Covenant". This gives us "Alien - Covenant".
+makePortableMovieTitle :: Movie -> Movie
+makePortableMovieTitle m = m {movieTitle = makeTextPortable (movieTitle m)}
+  where
+    makeTextPortable = T.pack . makePortable . T.unpack . T.replace ": " " - "
 
 -- Wrapper for less lifting :')
 putStrLn' :: (MonadIO m) => String -> m ()

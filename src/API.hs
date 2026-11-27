@@ -1,6 +1,9 @@
 module API
   ( defaultAPI,
     resolveAPIConfig,
+    searchMovieById,
+    searchMovieByName,
+    searchMoviesByName,
     searchSeasonById,
     searchSeasonByName,
     searchShowByName,
@@ -13,6 +16,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text qualified as T
 import Domain.API (APIConfig (..), APIKey, APIWrapper (..), LanguageCode)
 import Domain.Error (Error (..))
+import Domain.Movie (Movie)
 import Domain.Show (ItemId, Season (..), TvShow (..))
 import Exec.Env (Env, populateAPIKey, populateLanguage)
 import Monad.Tvmv (Tvmv)
@@ -42,6 +46,20 @@ searchSeasonById withApi apiConfig itemId seasonNum = do
 -- Given a show name, or a fragment of a name, get back a list of matches.
 searchShowByName :: APIWrapper m -> APIConfig -> T.Text -> m [TvShow]
 searchShowByName = queryShows
+
+-- Search for a movie with the given name and return the FIRST match.
+searchMovieByName :: (MonadError Error m) => APIWrapper m -> APIConfig -> T.Text -> m Movie
+searchMovieByName withApi apiConfig query = do
+  movieResults <- queryMovies withApi apiConfig query
+  liftEither $ firstMatch movieResults
+
+-- Get movie data using the movie's unique ID directly.
+searchMovieById :: APIWrapper m -> APIConfig -> ItemId -> m Movie
+searchMovieById = getMovie
+
+-- Given a movie name, or a fragment of a name, get back a list of matches.
+searchMoviesByName :: APIWrapper m -> APIConfig -> T.Text -> m [Movie]
+searchMoviesByName = queryMovies
 
 firstMatch :: [a] -> Either Error a
 firstMatch [] = Left $ APIError "No match found for search query"

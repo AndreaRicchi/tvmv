@@ -29,6 +29,7 @@ That's all there is to it!
         + [mv mode 2: Specify a show name and season number](#mv-mode-2-specify-a-show-name-and-season-number)
         + [Which mode should I use?](#which-mode-should-i-use)
         + [TV show name autodetection](#tv-show-name-autodetection)
+        + [Movies](#movies)
      * [undo](#undo)
         + [Log files](#log-files)
      * [search](#search)
@@ -97,6 +98,7 @@ media-server-friendly.
 - [x] Produce useful, human-readable filenames which are also compatible with
   Plex, Jellyfin, Kodi, and most other media servers.
 - [x] Search for shows right from the command-line.
+- [x] Rename movies too, with the `-m` flag.
 - [x] Write portable filenames: Windows-friendly, Mac-friendly, and (of
   course!) Linux-friendly.
 - [x] Autodetect season/episode numbers and show names in filenames.
@@ -320,6 +322,59 @@ Continue? (y/N)
 
 Nice!
 
+##### Movies
+
+`tvmv` is mostly about TV, but it can rename movies too. Add the `-m` (aka
+`--movie`) flag and tell it which movie you mean, either by name with `-n` or
+by its unique ID with `-i`:
+
+```
+# Rename all files in the current directory, using the first TMDB match for
+# "alien covenant":
+$ tvmv mv -m -n "alien covenant"
+
+# The same thing, but using the movie's unique ID. This ID can be fetched with
+# `tvmv search -m`, or directly from a search on the TMDB site.
+$ tvmv mv -m -i 126889
+
+# Only rename these particular files:
+$ tvmv mv -m -i 126889 ~/movies/ac.mkv ~/movies/ac.en.srt
+```
+
+Files are renamed to the movie's title and release year, which is the format
+that Plex, Jellyfin, and Kodi expect:
+
+```
+$ ls -1
+ac.en.srt
+ac.mkv
+
+$ tvmv mv -m -i 126889
+User API key override not detected, using tvmv's default API key
+Fetching movie data from API
+Preparing to execute the following 2 rename operations...
+
+ac.en.srt ->
+Alien - Covenant (2017).en.srt
+
+ac.mkv ->
+Alien - Covenant (2017).mkv
+
+Continue? (y/N)
+```
+
+A few things to note:
+
+- *Every* input file gets the movie's name, so `tvmv` works on one movie at a
+  time. If two of the input files would end up with the same name (two `mkv`
+  files in the same directory, say), `tvmv` will refuse to rename anything.
+  In that case, pass in only the files for the movie you want.
+- There's no autodetection for movies: you have to use `-n` or `-i`. And
+  there's no season, of course, so `-s` can't be used with `-m`.
+- If TMDB doesn't have a release date for the movie, the year is left off.
+- Everything else works the same as it does for TV: `undo`, `--force`,
+  `--language`, portable filenames, and so on.
+
 #### undo
 
 The `undo` command will undo the `mv` operations that you just ran, resetting
@@ -366,6 +421,13 @@ $ tvmv search buffy
 
 The TMDB URL for each result will also be displayed, which can be handy to
 quickly grab some more info about a result or verify it's the show you expect.
+
+Add the `-m` (aka `--movie`) flag to search for movies instead:
+
+```
+# Searches TMDB for movies that match the query "alien":
+$ tvmv search -m alien
+```
 
 ### A note on the `mv` command and show-matching
 

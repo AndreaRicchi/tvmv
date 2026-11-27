@@ -8,17 +8,20 @@ module Domain.Rename
     matchEpisodesAllowPartial,
     renameFile,
     renameFiles,
+    renameMovieFiles,
     undoRenameOp,
   )
 where
 
+import Data.List (nub, (\\))
 import Data.Text qualified as T
 import Domain.Error (Error (..))
+import Domain.Movie (Movie (..))
 import Domain.Show (Episode (..))
 import File.Path (replaceBaseName')
 import Print.Color (Colorized (..), cyan, mono, uncolor)
 import Print.Pretty (Pretty (..))
-import System.FilePath (makeValid)
+import System.FilePath (makeValid, takeFileName)
 import Text.Printf (printf)
 
 -- Contains a rename "op" for a single file. Either to be performed or which
@@ -114,9 +117,34 @@ renameFiles matchedEps = map toRenameOp epsAndFiles
 -- Given a full file path and the episode metadata for that file, generate a
 -- new filename.
 renameFile :: Episode -> FilePath -> RenameOp
-renameFile ep inFile = RenameOp {oldPath = inFile, newPath = newFullPath}
+renameFile ep = renameTo (generateBaseFileName ep)
+
+-- Given the movie metadata and ALL the files that belong to that movie (the
+-- video, any subtitles, etc.), generate RenameOps for those files. Unlike
+-- episodes, every file gets the *same* new base name -- only the extensions
+-- (and any subtitle language metadata) differ.
+--
+-- Which means two files with the same extension would end up with the same
+-- name. That almost certainly means the user handed us more than one movie, so
+-- we fail rather than rename half of them.
+renameMovieFiles :: Movie -> [FilePath] -> Either Error [RenameOp]
+renameMovieFiles m inFiles = case duplicatePaths of
+  [] -> Right ops
+  (duplicate : _) -> Left $ RenameError $ errorMessage duplicate
   where
-    newBaseName = generateBaseFileName ep
+    ops = map (renameTo $ generateMovieBaseFileName m) inFiles
+    newPaths = map newPath ops
+    duplicatePaths = newPaths \\ nub newPaths
+    errorMessage duplicate =
+      printf
+        "More than one file would be renamed to '%s' -- tvmv renames one movie at a time, try passing in only the files for this movie"
+        (takeFileName duplicate)
+
+-- Given a full file path and a new base name for that file, generate the
+-- RenameOp. The file's directory and extension are left alone.
+renameTo :: FilePath -> FilePath -> RenameOp
+renameTo newBaseName inFile = RenameOp {oldPath = inFile, newPath = newFullPath}
+  where
     -- Note final call to `makeValid`. Also note use of custom
     -- `replaceBaseName'`, which accounts for language metadata in filename.
     newFullPath = makeValid $ replaceBaseName' inFile newBaseName
@@ -133,6 +161,20 @@ generateBaseFileName ep =
       (episodeSeasonNumber ep)
       (episodeNumber ep)
       (T.unpack $ episodeName ep)
+
+-- Same idea, for movies:
+--
+-- "[movie title] ([year])"
+-- e.g. "Alien (1979)"
+--
+-- This is the format Plex, Jellyfin, and Kodi all expect. If we don't know the
+-- year, it's just the title.
+generateMovieBaseFileName :: Movie -> FilePath
+generateMovieBaseFileName m = removeDelimiters $ title <> year (movieYear m)
+  where
+    title = T.unpack $ movieTitle m
+    year Nothing = ""
+    year (Just y) = printf " (%d)" y
 
 -- Technically a filename is "valid" even if it contains path delimiters (at
 -- least according to `System.FilePath`, since it just assumes it's a full

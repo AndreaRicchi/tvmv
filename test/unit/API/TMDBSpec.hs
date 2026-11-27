@@ -1,7 +1,9 @@
 module API.TMDBSpec (spec) where
 
 import API.TMDB
+import Data.Time.Calendar (fromGregorian)
 import Domain.API (APIConfig (..))
+import Domain.Movie (Movie (..))
 import Domain.Show (Episode (..), Season (..), TvShow (..))
 import Network.API.TheMovieDB qualified as TMDB
 import Test.Hspec
@@ -11,6 +13,13 @@ spec = do
   describe "mapTvShow" $ do
     it "maps a TV show and all its episodes into our domain" $ do
       mapTvShow tmdbShow `shouldBe` resultShow
+
+  describe "mapMovie" $ do
+    it "maps a movie into our domain" $ do
+      mapMovie tmdbMovie `shouldBe` resultMovie
+
+    it "leaves the year unset if the movie has no release date" $ do
+      mapMovie tmdbMovie {TMDB.movieReleaseDate = Nothing} `shouldBe` resultMovie {movieYear = Nothing}
 
   describe "tmdbSettings" $ do
     it "passes the configured language along to TMDB" $ do
@@ -35,6 +44,31 @@ tmdbShow =
       TMDB.tvNumberOfSeasons = 7,
       TMDB.tvNumberOfEpisodes = 666,
       TMDB.tvSeasons = [tmdbSeason]
+    }
+
+tmdbMovie :: TMDB.Movie
+tmdbMovie =
+  TMDB.Movie
+    { TMDB.movieID = 348,
+      TMDB.movieTitle = "Alien",
+      TMDB.movieOverview = "In space, etc.",
+      TMDB.movieGenres = [],
+      TMDB.moviePopularity = 100,
+      TMDB.moviePosterPath = "poster/path/here",
+      TMDB.movieReleaseDate = Just (fromGregorian 1979 5 25),
+      TMDB.movieAdult = False,
+      TMDB.movieIMDB = "tt0078748",
+      TMDB.movieRunTime = 117
+    }
+
+resultMovie :: Movie
+resultMovie =
+  Movie
+    { movieId = 348,
+      movieTitle = "Alien",
+      movieYear = Just 1979,
+      movieDescription = "In space, etc.",
+      movieUrl = Just "https://www.themoviedb.org/movie/348"
     }
 
 tmdbSeason :: TMDB.Season

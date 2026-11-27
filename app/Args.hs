@@ -22,13 +22,13 @@ commandParser =
         "mv"
         ( info
             (mvCommandParser <**> helper)
-            (progDesc "Rename the files for a TV season using API data")
+            (progDesc "Rename the files for a TV season (or a movie, with -m) using API data")
         )
         <> command
           "search"
           ( info
               (searchCommandParser <**> helper)
-              (progDesc "Query the configured API for TV show data")
+              (progDesc "Query the configured API for TV show (or movie, with -m) data")
           )
         <> command
           "undo"
@@ -56,6 +56,7 @@ mvOptionsParser =
     <*> noLogFlagParser
     <*> allowPartialParser
     <*> unicodeFilenamesParser
+    <*> movieFlagParser
     <*> userSearchTermsParser
     <*> filePathsParser
 
@@ -78,7 +79,7 @@ nameParser =
       ( long "name"
           <> short 'n'
           <> metavar "SHOW_NAME"
-          <> help "The show name, or a fragment of the show name. We'll search the API with this query and use the first matching result to get show data."
+          <> help "The show name, or a fragment of the show name. We'll search the API with this query and use the first matching result to get show data. (With `-m`, the movie name.)"
       )
 
 idParser :: Parser SearchKey
@@ -89,7 +90,7 @@ idParser =
       ( long "id"
           <> short 'i'
           <> metavar "SHOW_ID"
-          <> help "If you have the show's unique ID, you can search with that directly, rather than using its name. (You can get a show's ID with `tvmv search`.)"
+          <> help "If you have the show's unique ID, you can search with that directly, rather than using its name. (You can get a show's ID with `tvmv search`.) With `-m`, the movie's ID."
       )
 
 maybeSeasonNumberParser :: Parser (Maybe Int)
@@ -157,6 +158,14 @@ unicodeFilenamesParser =
         <> help "Allow full unicode set of characters in resulting filenames. (By default, tvmv will create portable, Windows-friendly, ASCII-only filenames.)"
     )
 
+movieFlagParser :: Parser Bool
+movieFlagParser =
+  switch
+    ( long "movie"
+        <> short 'm'
+        <> help "Work with movies rather than TV shows. For `mv`, the input files are renamed to the movie's title and year, and you must pick the movie with `-n` or `-i`."
+    )
+
 maybeApiKeyReader :: ReadM (Maybe APIKey)
 maybeApiKeyReader = maybeTextReader
 
@@ -185,10 +194,11 @@ searchOptionsParser =
   SearchOptions
     <$> apiKeyParser
     <*> languageParser
+    <*> movieFlagParser
     <*> argument
       str
       ( metavar "SHOW_NAME"
-          <> help "The show name, or a fragment of the show name."
+          <> help "The show (or movie) name, or a fragment of the name."
       )
 
 undoOptionsParser :: Parser UndoOptions

@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--language` option (aka `-l`), e.g. `tvmv mv -l it-IT`. The language can
   also be set with the `TVMV_LANGUAGE` environment variable or the
   `$XDG_CONFIG_HOME/tvmv/language` file.
+- Movies! Use the new `--movie` flag (aka `-m`) with `mv` to rename a movie's
+  files to its title and release year, e.g. `tvmv mv -m -n "alien covenant"`
+  or `tvmv mv -m -i 126889`. The same flag makes `search` look for movies
+  rather than TV shows.
 
 
 ## 0.6.0 - 2024-09-05

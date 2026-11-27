@@ -79,6 +79,7 @@ tests:
     - tvmv
     - hspec
     - themoviedb
+    - time
   integration:
     main:                Spec.hs
     source-dirs:         test/integration

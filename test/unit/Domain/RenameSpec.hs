@@ -2,6 +2,7 @@ module Domain.RenameSpec (spec) where
 
 import Data.Either (isLeft, isRight)
 import Data.Text qualified as T
+import Domain.Movie (Movie (..))
 import Domain.Rename
 import Domain.Show (Episode (..))
 import System.FilePath (normalise)
@@ -52,6 +53,33 @@ spec = do
             newPath = p "/root/buffy/season 42/Buffy the Vampire Slayer - s42e666 - The A-B-Cs of dusting vamps and the 1-2-3s of dating them.mkv"
           }
 
+  describe "renameMovieFiles" $ do
+    it "names a movie's file after its title and year" $ do
+      renameMovieFiles alien ["/root/movies/a1.mkv"]
+        `shouldBe` Right [RenameOp {oldPath = "/root/movies/a1.mkv", newPath = p "/root/movies/Alien (1979).mkv"}]
+
+    it "leaves the year off if there isn't one" $ do
+      renameMovieFiles alien {movieYear = Nothing} ["/root/movies/a1.mkv"]
+        `shouldBe` Right [RenameOp {oldPath = "/root/movies/a1.mkv", newPath = p "/root/movies/Alien.mkv"}]
+
+    it "gives all of a movie's files the same name, keeping subtitle language metadata" $ do
+      renameMovieFiles alien ["a1.mkv", "a1.en.srt", "a1.de.forced.srt"]
+        `shouldBe` Right
+          [ RenameOp {oldPath = "a1.mkv", newPath = "Alien (1979).mkv"},
+            RenameOp {oldPath = "a1.en.srt", newPath = "Alien (1979).en.srt"},
+            RenameOp {oldPath = "a1.de.forced.srt", newPath = "Alien (1979).de.forced.srt"}
+          ]
+
+    it "makes invalid file names valid" $ do
+      renameMovieFiles alien {movieTitle = "Face/Off"} ["/root/movies/fo.mkv"]
+        `shouldBe` Right [RenameOp {oldPath = "/root/movies/fo.mkv", newPath = p "/root/movies/Face-Off (1979).mkv"}]
+
+    it "returns an error value if two files would get the same name" $ do
+      renameMovieFiles alien ["a1.mkv", "some-other-movie.mkv", "a1.en.srt"] `shouldSatisfy` isLeft
+
+    it "returns an empty list if given no files" $ do
+      renameMovieFiles alien [] `shouldBe` Right []
+
   describe "undoRenameOp" $ do
     it "flip the old/new args for a given op" $ do
       undoRenameOp RenameOp {oldPath = "old/path/to/file.mkv", newPath = "new/path/to/file.mkv"}
@@ -80,6 +108,16 @@ expectedRenameOps =
         newPath = p "/root/buffy/season 4/Buffy the Vampire Slayer - s04e10 - Hush.mkv"
       }
   ]
+
+alien :: Movie
+alien =
+  Movie
+    { movieId = 348,
+      movieTitle = "Alien",
+      movieYear = Just 1979,
+      movieDescription = "In space, etc.",
+      movieUrl = Nothing
+    }
 
 buffy :: T.Text
 buffy = "Buffy the Vampire Slayer"
